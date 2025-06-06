@@ -16,6 +16,8 @@ keywords = [ "otel", "generator", "synthetic" ]
 
 [dependencies]
 # later on update to version number after crates being published
-robjetives_config = { path = "../robjetives_config" }
+#robjetives_config = { path = "../robjetives_config" }
+robjetives_config = { git = "https://github.com/quoeamaster/robjetives_config.git", branch = "main" }
 # later on update to version number after crates being published
-robjetives_log = { path = "../robjetives_log" }
+#robjetives_log = { path = "../robjetives_log" }
+robjetives_log = { git = "https://github.com/quoeamaster/robjetives_log.git", branch = "main" }
