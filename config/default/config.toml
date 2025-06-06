@@ -1,0 +1,35 @@
+
+# number of synthetic entries to generate (e.g. 5M)
+number_of_entries = 50000000
+
+# rfc3339 date time format to be accepted
+timestamp_format = "yyyy-mm-ddThh:mm:ss.sssZ"
+# should use the current timestamp as the start interval?
+use_now_as_timestamp = true
+# how the `number_of_entries` being distributed within the given duration (e.g. the `5M` entries would be distributed into the `10m` duration)
+generation_duration = "10m"
+# [optional]
+# the start_timestamp; only useful if `use_now_as_timestamp` is false
+start_timestamp = "2022-01-01T00:00:00.000Z"
+
+# how the `number_of_entries` being distributed
+# - even            = every interval would have 0 or more entries generated and would not have a huge gap of empty intervals
+# - early_fill      = fill the entries asap into the early intervals; resulting a large number of later intervals having 0 entries
+# - sparse_fill     = pick random interval-ranges to fill in entries; resulting huge gaps between interval-ranges
+distribution_by = "even"
+
+
+# exporter is a map of endpoints to recieve the generated data
+[[exporter]]
+name = "file"
+[exporter.fields]
+# can utilize the robjetives_log crate for file logging...
+path = "./generated/"
+
+# [[exporter]]
+# name = "clickhouse"
+# [exporter.fields]
+# url = "http://localhost:3125"
+# user = "root"
+# password = "password"
+

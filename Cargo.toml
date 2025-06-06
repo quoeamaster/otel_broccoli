@@ -1,0 +1,21 @@
+[package]
+name = "otel_broccoli"
+version = "0.1.0"
+edition = "2021"
+authors = ["Takara-Mono <quoeamaster@gmail.com>"]
+description = """
+otel data generator.
+"""
+license = "MIT"
+repository = "https://github.com/quoeamaster/otel_broccoli"
+homepage = "https://github.com/quoeamaster/otel_broccoli"
+# documentation = "https://docs.rs/my_logging_lib"
+readme = "README.md"
+categories = [ "otel", "generator", "synthetic" ]
+keywords = [ "otel", "generator", "synthetic" ]
+
+[dependencies]
+# later on update to version number after crates being published
+robjetives_config = { path = "../robjetives_config" }
+# later on update to version number after crates being published
+robjetives_log = { path = "../robjetives_log" }
