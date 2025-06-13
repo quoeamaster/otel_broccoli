@@ -1,0 +1,30 @@
+# use case:
+# - stdout (which is compulsory by default) - prints out the generated logs to the stdout
+#   - avoid over verbose only print the 1st log line and the last log line
+#   - in between would only update the generated row counts (e.g. 100, 200, 300, ... the last entry number)
+# - file - logging the generated data to a specific file
+
+number_of_entries = 1000
+
+use_now_as_timestamp = true
+generation_duration = "10m"
+
+# how the `number_of_entries` being distributed
+# - even            = every interval would have 0 or more entries generated and would not have a huge gap of empty intervals
+# - early_fill      = fill the entries asap into the early intervals; resulting a large number of later intervals having 0 entries
+# - sparse_fill     = pick random interval-ranges to fill in entries; resulting huge gaps between interval-ranges
+distribution_by = "even"
+
+# exporter is a map of endpoints to recieve the generated data
+[[exporter]]
+name = "file"
+enabled = true
+# limitations, the exporter.fields is a HashMap<String, String> at the back, 
+# hence even if the value is a non-string (e.g. interger, bool) it still must be `quoted`.
+[exporter.fields]
+path = "./generated/"
+filename = "stdout_test.log"
+
+
+
+

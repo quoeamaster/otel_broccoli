@@ -21,3 +21,8 @@ robjetives_config = { git = "https://github.com/quoeamaster/robjetives_config.gi
 # later on update to version number after crates being published
 #robjetives_log = { path = "../robjetives_log" }
 robjetives_log = { git = "https://github.com/quoeamaster/robjetives_log.git", branch = "main" }
+
+getset = "0.1"
+toml = "0.8"
+serde = { version = "1.0", features = ["derive"] }
+

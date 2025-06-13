@@ -21,15 +21,30 @@ distribution_by = "even"
 
 # exporter is a map of endpoints to recieve the generated data
 [[exporter]]
+# - stdout (which is compulsory by default) - prints out the generated logs to the stdout
+#   - verbose: false -> avoid over verbose only print the 1st log line and the last log line
+#   - verbose: false -> in between would only update the generated row counts (e.g. 100, 200, 300, ... the last entry number)
+#   - verbose: true -> prints out every log line (since verbose); great for debug but would slow down 
+#       the log generation process as printing out to stdout is an `expensive` operation
+name = "stdout"
+verbose = false
+enabled = true
+
+[[exporter]]
 name = "file"
+enabled = false
 [exporter.fields]
 # can utilize the robjetives_log crate for file logging...
 path = "./generated/"
+filename = "log.log"
 
-# [[exporter]]
-# name = "clickhouse"
-# [exporter.fields]
-# url = "http://localhost:3125"
-# user = "root"
-# password = "password"
+
+[[exporter]]
+name = "clickhouse"
+enabled = false
+[exporter.fields]
+url = "http://localhost:3125"
+user = "root"
+password = "password"
+
 
