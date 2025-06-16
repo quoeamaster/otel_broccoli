@@ -50,6 +50,20 @@ pub struct ConfigExporter {
     fields: Option<HashMap<String, String>>,
 }
 
+impl Config {
+    pub fn new() -> Self {
+        Config {
+            number_of_entries: None,
+            timestamp_format: None,
+            use_now_as_timestamp: None,
+            generation_duration: None,
+            start_timestamp: None,
+            distribution_by: None,
+            exporters: None,
+        }
+    }
+}
+
 impl BackFillable for Config {
     fn back_fill(&mut self, from: &Self) {
         if self.number_of_entries.is_none() {
@@ -240,13 +254,13 @@ mod tests {
         assert_eq!(config.number_of_entries().unwrap(), 1000);
         assert_eq!(
             config.timestamp_format().as_ref().unwrap(),
-            "yyyy-mm-ddThh:mm:ss.sssZ"
+            "%Y-%m-%dT%H:%M:%S%.f%:z"
         );
         assert_eq!(config.use_now_as_timestamp().unwrap(), true);
         assert_eq!(config.generation_duration().as_ref().unwrap(), "10m");
         assert_eq!(
             config.start_timestamp().as_ref().unwrap(),
-            "2022-01-01T00:00:00.000Z"
+            "2022-01-01T00:00:00.000+00:00"
         );
         assert_eq!(config.distribution_by().as_ref().unwrap(), "even");
         // exporters...

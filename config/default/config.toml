@@ -3,14 +3,18 @@
 number_of_entries = 50000000
 
 # rfc3339 date time format to be accepted
-timestamp_format = "yyyy-mm-ddThh:mm:ss.sssZ"
+# [lesson]
+# "%Y-%m-%dT%H:%M:%S%.f%:z" equivalent to = "yyyy-mm-ddThh:mm:ss.sssZ" or rfc3339
+timestamp_format = "%Y-%m-%dT%H:%M:%S%.f%:z"
 # should use the current timestamp as the start interval?
 use_now_as_timestamp = true
 # how the `number_of_entries` being distributed within the given duration (e.g. the `5M` entries would be distributed into the `10m` duration)
 generation_duration = "10m"
 # [optional]
-# the start_timestamp; only useful if `use_now_as_timestamp` is false
-start_timestamp = "2022-01-01T00:00:00.000Z"
+# - the start_timestamp; only useful if `use_now_as_timestamp` is false
+# [lesson] ending with Z means utc but that is not the best solution as some timeformant required a timezone like +08:00 for Singapore.
+# - start_timestamp = "2022-01-01T00:00:00.000Z"
+start_timestamp = "2022-01-01T00:00:00.000+00:00"
 
 # how the `number_of_entries` being distributed
 # - even            = every interval would have 0 or more entries generated and would not have a huge gap of empty intervals
