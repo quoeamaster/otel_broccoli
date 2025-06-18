@@ -19,3 +19,6 @@ target/
 # design doc / mindset
 doc/design/**/*
 
+# logs
+logs/**/*
+

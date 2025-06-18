@@ -1,0 +1,16 @@
+[[configs]]
+name = "stdout-appender"
+description = "log to stdout"
+logger_type = "stdout"
+logger_level = "debug"
+
+[[configs]]
+name = "rolling-file-appender"
+description = "log to rolling file"
+logger_type = "rolling_file"
+logger_level = "info"
+
+[configs.fields]
+dir = "./logs"
+path = "app.log"
+rotation = "day"

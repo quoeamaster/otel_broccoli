@@ -185,8 +185,13 @@ fn generate_datapoints_even(
         let (first_slot, second_slot) = pick_2_random_datapoint(duration_in_seconds);
         // update a random additive deducted from first_slot to second_slot
         let first_slot_row_to_add = datapoints[first_slot as usize].rows_to_add;
-        // [debug]
-        //println!("*** first {} vs {} - usize {}, rows_to_add {}", first_slot, second_slot, first_slot as usize, first_slot_row_to_add);
+        tracing::trace!(
+            "first_slot={} vs second_slot={} - first_slot_in_usize {}, rows_to_add {}",
+            first_slot,
+            second_slot,
+            first_slot as usize,
+            first_slot_row_to_add
+        );
         if first_slot_row_to_add == 1 {
             continue;
         }
@@ -232,9 +237,13 @@ fn generate_datapoints_sparse_fill(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app_init;
 
     #[test]
     fn test_parse_time_duration_value_and_unit() {
+        // init loggers
+        app_init("./config/default/loggers.toml".to_string()).unwrap();
+
         let result = parse_time_duration_value_and_unit("10m".to_string());
         assert_eq!(result.is_some(), true);
         assert_eq!(result.as_ref().unwrap().0, 10);
@@ -254,6 +263,9 @@ mod tests {
 
     #[test]
     fn test_parse_time_duration() {
+        // init loggers
+        app_init("./config/default/loggers.toml".to_string()).unwrap();
+
         let result = parse_time_duration("10m".to_string());
         assert_eq!(result.is_ok(), true);
         assert_eq!(
@@ -281,6 +293,9 @@ mod tests {
     // create an artifial Config struct with combos to test around
     #[test]
     fn test_generate_time_range() {
+        // init loggers
+        app_init("./config/default/loggers.toml".to_string()).unwrap();
+
         let mut cfg = Config::new();
         cfg.set_distribution_by(Some("even".to_string()));
         cfg.set_number_of_entries(Some(10000));
@@ -289,8 +304,7 @@ mod tests {
         cfg.set_generation_duration(Some("10m".to_string()));
         cfg.set_start_timestamp(Some("2022-01-01T00:00:00.000+00:00".to_string()));
 
-        // [debug]
-        //println!("\n config {:?}", cfg);
+        tracing::trace!("config: {:#?}", cfg);
 
         // [case][01] not using NOW(), provide a valid timestamp_format + start_timestamp
         let result = generate_time_range(&cfg);
@@ -367,16 +381,22 @@ mod tests {
 
     #[test]
     fn test_pick_2_random_datapoint() {
+        // init loggers
+        app_init("./config/default/loggers.toml".to_string()).unwrap();
+
         for _ in 0..20 {
             let result = pick_2_random_datapoint(1000);
             assert_eq!(result.0 != result.1, true);
-            // [debug]
-            //println!("{} vs {}", result.0, result.1);
+
+            tracing::trace!("{} vs {}", result.0, result.1);
         }
     }
 
     #[test]
     fn test_generate_datapoints_even() {
+        // init loggers
+        app_init("./config/default/loggers.toml".to_string()).unwrap();
+
         let mut cfg = Config::new();
         cfg.set_distribution_by(Some("even".to_string()));
         cfg.set_number_of_entries(Some(10000));
@@ -387,20 +407,22 @@ mod tests {
 
         let result = generate_datapoints(&cfg);
         assert_eq!(result.is_err(), false);
+        tracing::trace!("{:?}", result.as_ref().unwrap());
 
-        //println!("{:?}", result.as_ref().unwrap());
         let mut sum = 0;
+        let mut histogram = String::new();
         let datapoints = result.as_ref().unwrap();
         for datapoint in datapoints {
             sum += datapoint.rows_to_add;
             // [debug]
             // [graph - histogram]
-            print!("timestamp: {} | ", datapoint.timestamp);
+            histogram.push_str(format!("timestamp: {} | ", datapoint.timestamp).as_str());
             for _ in 0..datapoint.rows_to_add {
-                print!(".");
+                histogram.push_str(".");
             }
-            println!("");
+            histogram.push_str("\n");
         }
+        tracing::info!("\n{}", histogram);
         assert_eq!(sum as u32 == cfg.number_of_entries().unwrap(), true);
     }
 }
