@@ -101,7 +101,8 @@ fn parse_time_duration(value: String) -> Result<Duration, Box<dyn std::error::Er
 }
 
 /// struct to hold the timestamp and the number of rows to add - acts as a DataPoint in the distribution.
-struct DataPoint {
+#[derive(Debug)]
+pub struct DataPoint {
     timestamp: DateTime<Utc>,
     rows_to_add: i16,
 }
@@ -179,11 +180,17 @@ fn generate_datapoints_even(
 
     // second fill (random pick and assign)
     // rounds 2/10 of the num_of_entries_to_generate, make sure a randomness is introduced in the distribution set.
-    let num_shuffles = num_entries_to_generate * 0.2 as u32;
+    let num_shuffles = (num_entries_to_generate as f32 * 0.2) as u32;
     for _ in 0..num_shuffles {
         let (first_slot, second_slot) = pick_2_random_datapoint(duration_in_seconds);
         // update a random additive deducted from first_slot to second_slot
-        let delta = rand::rng().random_range(1..datapoints[first_slot as usize].rows_to_add);
+        let first_slot_row_to_add = datapoints[first_slot as usize].rows_to_add;
+        // [debug]
+        //println!("*** first {} vs {} - usize {}, rows_to_add {}", first_slot, second_slot, first_slot as usize, first_slot_row_to_add);
+        if first_slot_row_to_add == 1 {
+            continue;
+        }
+        let delta = rand::rng().random_range(1..first_slot_row_to_add);
         datapoints[first_slot as usize].rows_to_add -= delta;
         datapoints[second_slot as usize].rows_to_add += delta;
     }
@@ -364,26 +371,36 @@ mod tests {
             let result = pick_2_random_datapoint(1000);
             assert_eq!(result.0 != result.1, true);
             // [debug]
-            println!("{} vs {}", result.0, result.1);
+            //println!("{} vs {}", result.0, result.1);
         }
     }
 
     #[test]
     fn test_generate_datapoints_even() {
-/*
-let mut cfg = Config::new();
-cfg.set_distribution_by(Some("even".to_string()));
-cfg.set_number_of_entries(Some(10000));
-cfg.set_timestamp_format(Some("%Y-%m-%dT%H:%M:%S%.f%:z".to_string()));
-cfg.set_use_now_as_timestamp(Some(false));
-cfg.set_generation_duration(Some("10m".to_string()));
-cfg.set_start_timestamp(Some("2022-01-01T00:00:00.000+00:00".to_string()));
+        let mut cfg = Config::new();
+        cfg.set_distribution_by(Some("even".to_string()));
+        cfg.set_number_of_entries(Some(10000));
+        cfg.set_timestamp_format(Some("%Y-%m-%dT%H:%M:%S%.f%:z".to_string()));
+        cfg.set_use_now_as_timestamp(Some(false));
+        cfg.set_generation_duration(Some("10m".to_string()));
+        cfg.set_start_timestamp(Some("2022-01-01T00:00:00.000+00:00".to_string()));
 
-cfg.set_num_entries_to_generate(Some(10000));
-cfg.set_model(Some("even".to_string()));
-...
+        let result = generate_datapoints(&cfg);
+        assert_eq!(result.is_err(), false);
 
-*/        
+        //println!("{:?}", result.as_ref().unwrap());
+        let mut sum = 0;
+        let datapoints = result.as_ref().unwrap();
+        for datapoint in datapoints {
+            sum += datapoint.rows_to_add;
+            // [debug]
+            // [graph - histogram]
+            print!("timestamp: {} | ", datapoint.timestamp);
+            for _ in 0..datapoint.rows_to_add {
+                print!(".");
+            }
+            println!("");
+        }
+        assert_eq!(sum as u32 == cfg.number_of_entries().unwrap(), true);
     }
-
 }
