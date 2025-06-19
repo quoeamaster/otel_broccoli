@@ -1,3 +1,5 @@
+use core::num;
+
 use crate::config::Config;
 use chrono::{DateTime, Duration, Utc};
 use rand::Rng;
@@ -222,6 +224,64 @@ fn generate_datapoints_early_fill(
     num_entries_to_generate: u32,
     datapoints: &mut Vec<DataPoint>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    // loop through the slots
+    // assign a random rows_to_add value to the given slot
+    //  (remember the actual ceiling is the num_entries_to_generate; so a logical ceiling would be num_entries_to_generate * 1% per slot's rows_to_add')
+    // once the accumulated rows_to_add is greater than or equals to num_entries_to_generate, augmentation done and can't exit the allocation.
+
+    let logical_ceiling = (num_entries_to_generate as f32 * 0.01) as u32;
+    let logical_floor: u32 = 1;
+
+    let mut sum = 0;
+    let mut done_allocation = false;
+    let mut early_log = false;
+    for i in 0..duration_in_seconds {
+        let mut rows_to_add = rand::rng().random_range(logical_floor..=logical_ceiling);
+        // guard check
+        if sum + rows_to_add > num_entries_to_generate {
+            rows_to_add = num_entries_to_generate - sum;
+            // [log]
+            tracing::trace!(
+                "sum: {}, rows_to_add: {}, num_entries_to_generate: {}, diff: {}",
+                sum,
+                rows_to_add,
+                num_entries_to_generate,
+                num_entries_to_generate - sum
+            );
+            sum = num_entries_to_generate;
+            if !early_log {
+                early_log = true;
+                // [log]
+                tracing::info!(
+                    message = format!(
+                        "{} of distribution all early filled at idx {}",
+                        num_entries_to_generate, i
+                    ),
+                    module = "augmentation"
+                );
+            }
+            // push a datapoint
+            // even though empty rows_to_add, must still have a datapoint
+            datapoints.push(DataPoint {
+                timestamp: start_time + Duration::seconds(i),
+                rows_to_add: rows_to_add as i16,
+            });
+
+            done_allocation = true;
+        } else {
+            if !done_allocation {
+                sum += rows_to_add;
+            } else {
+                rows_to_add = 0;
+            }
+            // push a datapoint
+            // even though empty rows_to_add, must still have a datapoint
+            datapoints.push(DataPoint {
+                timestamp: start_time + Duration::seconds(i),
+                rows_to_add: rows_to_add as i16,
+            });
+        } // end - if (all done allocation?)
+    }
     Ok(())
 }
 
@@ -231,6 +291,16 @@ fn generate_datapoints_sparse_fill(
     num_entries_to_generate: u32,
     datapoints: &mut Vec<DataPoint>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    // create a random number of `zones`;
+    //   each zone would be allocated a number of datapoints to be generated. (also another random value based on num_entries_to_generate)
+    // there would be a random gap between the `zones`; could be 0 - adjacent with the previous zone. Or could be a random number of seconds (etc)
+    //   however, the last zone's outer boundary must be touching the the last datapoint's timestamp.
+    //   hence the logic would make sense in this way
+    //   - calculate the first zone's boundaries
+    //   - calculate the last zone's boundaries
+    //   - the residual boundary would be shared with the remaining zone(s).
+    //   - each zone would be allocated a random rows_to_add value based on num_entries_to_generate.
+
     Ok(())
 }
 
@@ -425,4 +495,45 @@ mod tests {
         tracing::info!("\n{}", histogram);
         assert_eq!(sum as u32 == cfg.number_of_entries().unwrap(), true);
     }
+
+    #[test]
+    fn test_generate_datapoints_early_fill() {
+        // init loggers
+        app_init("./config/default/loggers.toml".to_string()).unwrap();
+
+        let mut cfg = Config::new();
+        cfg.set_distribution_by(Some("early_fill".to_string()));
+        cfg.set_number_of_entries(Some(10000));
+        cfg.set_timestamp_format(Some("%Y-%m-%dT%H:%M:%S%.f%:z".to_string()));
+        cfg.set_use_now_as_timestamp(Some(false));
+        cfg.set_generation_duration(Some("10m".to_string()));
+        cfg.set_start_timestamp(Some("2022-01-01T00:00:00.000+00:00".to_string()));
+
+        let result = generate_datapoints(&cfg);
+        assert_eq!(result.is_err(), false);
+        tracing::trace!("{:?}", result.as_ref().unwrap());
+
+        let mut sum = 0;
+        let mut histogram = String::new();
+        let datapoints = result.as_ref().unwrap();
+        for datapoint in datapoints {
+            sum += datapoint.rows_to_add;
+            // [debug]
+            // [graph - histogram]
+            histogram.push_str(format!("timestamp: {} | ", datapoint.timestamp).as_str());
+            for _ in 0..datapoint.rows_to_add {
+                histogram.push_str(".");
+            }
+            histogram.push_str("\n");
+        }
+        tracing::info!("\n{}", histogram);
+        tracing::info!(
+            "sum: {} vs num_entries: {}",
+            sum,
+            cfg.number_of_entries().unwrap()
+        );
+        assert_eq!(sum as u32 == cfg.number_of_entries().unwrap(), true);
+    }
+
+    // sparse_fill
 }
