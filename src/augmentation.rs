@@ -233,54 +233,37 @@ fn generate_datapoints_early_fill(
     let logical_floor: u32 = 1;
 
     let mut sum = 0;
-    let mut done_allocation = false;
-    let mut early_log = false;
+    // [deprecated] used to create `empty` datapoints, but not make sense for most use case, hence simply drop it.
+    // let mut done_allocation = false;
+    // let mut early_log = false;
     for i in 0..duration_in_seconds {
         let mut rows_to_add = rand::rng().random_range(logical_floor..=logical_ceiling);
         // guard check
         if sum + rows_to_add > num_entries_to_generate {
             rows_to_add = num_entries_to_generate - sum;
-            // [log]
-            tracing::trace!(
-                "sum: {}, rows_to_add: {}, num_entries_to_generate: {}, diff: {}",
-                sum,
-                rows_to_add,
-                num_entries_to_generate,
-                num_entries_to_generate - sum
-            );
             sum = num_entries_to_generate;
-            if !early_log {
-                early_log = true;
-                // [log]
-                tracing::info!(
-                    message = format!(
-                        "{} of distribution all early filled at idx {}",
-                        num_entries_to_generate, i
-                    ),
-                    module = "augmentation"
-                );
-            }
-            // push a datapoint
-            // even though empty rows_to_add, must still have a datapoint
-            datapoints.push(DataPoint {
-                timestamp: start_time + Duration::seconds(i),
-                rows_to_add: rows_to_add as i16,
-            });
-
-            done_allocation = true;
         } else {
-            if !done_allocation {
-                sum += rows_to_add;
-            } else {
-                rows_to_add = 0;
-            }
-            // push a datapoint
-            // even though empty rows_to_add, must still have a datapoint
-            datapoints.push(DataPoint {
-                timestamp: start_time + Duration::seconds(i),
-                rows_to_add: rows_to_add as i16,
-            });
-        } // end - if (all done allocation?)
+            sum += rows_to_add;
+        }
+        // push a datapoint
+        // even though empty rows_to_add, must still have a datapoint
+        datapoints.push(DataPoint {
+            timestamp: start_time + Duration::seconds(i),
+            rows_to_add: rows_to_add as i16,
+        });
+        if sum == num_entries_to_generate {
+            // [log]
+            tracing::info!(
+                message = format!(
+                    "{} of distribution all early filled at idx {}, saved {} rows to generate",
+                    num_entries_to_generate,
+                    i,
+                    duration_in_seconds - i
+                ),
+                module = "augmentation"
+            );
+            break;
+        } // end - if (sum == num_entries_to_generate)
     }
     Ok(())
 }
