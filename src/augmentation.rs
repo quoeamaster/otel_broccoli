@@ -123,25 +123,25 @@ pub fn generate_datapoints(cfg: &Config) -> Result<Vec<DataPoint>, Box<dyn std::
     // PS. you might view this as a limitation of the implementation.
     let duration_in_seconds = duration.num_seconds();
 
-    let num_entries_to_generate = cfg.number_of_entries().as_ref().unwrap().clone();
+    let num_entries_to_generate = cfg.number_of_entries().as_ref().unwrap();
     let model = cfg.distribution_by().as_deref().unwrap().to_lowercase();
     match model.as_str() {
         "even" => generate_datapoints_even(
             start_time,
             duration_in_seconds,
-            num_entries_to_generate,
+            *num_entries_to_generate,
             &mut datapoints,
         )?,
         "early_fill" => generate_datapoints_early_fill(
             start_time,
             duration_in_seconds,
-            num_entries_to_generate,
+            *num_entries_to_generate,
             &mut datapoints,
         )?,
         "sparse_fill" => generate_datapoints_sparse_fill(
             start_time,
             duration_in_seconds,
-            num_entries_to_generate,
+            *num_entries_to_generate,
             &mut datapoints,
         )?,
         _ => {
@@ -215,7 +215,7 @@ fn pick_2_random_datapoint(slots_length: i64) -> (i64, i64) {
         }
         second_slot = rand::rng().random_range(0..slots_length);
     }
-    return (first_slot, second_slot);
+    (first_slot, second_slot)
 }
 
 fn generate_datapoints_early_fill(
@@ -361,7 +361,7 @@ fn generate_datapoints_sparse_fill(
 }
 
 fn generate_sparse_fill_zone_and_boundaries(
-    data_zones_to_be_generated: &Vec<u32>,
+    data_zones_to_be_generated: &[u32],
     generation_factor: u32,
     start_time: DateTime<Utc>,
     duration_in_seconds: i64,
@@ -380,9 +380,9 @@ fn generate_sparse_fill_zone_and_boundaries(
         data_zones_len
     ];
     // first iteration; fill up start_time, end_time
-    let mut zone_idx = 0;
     let zone_span = duration_in_seconds / data_zones_len as i64;
-    for zone in data_zones.iter_mut() {
+    // for zone in data_zones.iter_mut() {
+    for (zone_idx, zone) in data_zones.iter_mut().enumerate() {
         zone.start_time = start_time + Duration::seconds(zone_span * zone_idx as i64);
 
         if zone_idx == data_zones_len - 1 {
@@ -390,7 +390,6 @@ fn generate_sparse_fill_zone_and_boundaries(
         } else {
             zone.end_time = zone.start_time + Duration::seconds(zone_span - 1);
         }
-        zone_idx += 1;
     }
     // pick which zone to fill and which not
     for zone in data_zones_to_be_generated.iter() {
