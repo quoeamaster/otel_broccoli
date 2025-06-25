@@ -1,8 +1,8 @@
-use core::num;
-
 use crate::config::Config;
 use chrono::{DateTime, Duration, Utc};
 use rand::Rng;
+
+const DEFAULT_SPARSE_FILL_ZONE_GENERATION_FACTOR: u32 = 3;
 
 /// Generate a tuple of two DateTime values, `start_time` and `end_time`.
 ///
@@ -284,7 +284,183 @@ fn generate_datapoints_sparse_fill(
     //   - the residual boundary would be shared with the remaining zone(s).
     //   - each zone would be allocated a random rows_to_add value based on num_entries_to_generate.
 
+    let num_of_zone = rand::rng().random_range(3..=6);
+    let zone_allocation_ceiling = num_entries_to_generate / num_of_zone;
+    let mut zone_allocations: Vec<u32> = vec![];
+
+    // first fill for zone_allocations
+    let mut sum = 0;
+    for i in 0..num_of_zone {
+        if i == num_of_zone - 1 {
+            zone_allocations.push(num_entries_to_generate - sum);
+            break;
+        } else {
+            zone_allocations.push(zone_allocation_ceiling);
+        }
+        sum += zone_allocation_ceiling;
+    }
+    // shuffling
+    // - based on num_of_zone * 5 times of shuffle
+    for _ in 0..num_of_zone * 5 {
+        let (first_slot, second_slot) = pick_2_random_datapoint(num_of_zone as i64);
+        // generate a random delta
+        let upper_bound = zone_allocations[first_slot as usize];
+        if upper_bound < 2 {
+            continue;
+        }
+        let delta = rand::rng().random_range(1..upper_bound);
+
+        zone_allocations[first_slot as usize] -= delta;
+        zone_allocations[second_slot as usize] += delta;
+    }
+    // [log]
+    tracing::debug!(
+        message = format!(
+            "number of zones {} for sparse-fill after shuffle, ceilings per zone: {:?}",
+            num_of_zone, zone_allocations
+        ),
+        module = "augmentation"
+    );
+
+    // logic of slots...
+    // - num_of_zones = 6 -> slots available = num_of_zones * 6 = 36;
+    // - each slots boundary is the result of an even value of the duration_in_seconds; ie. duration_in_seconds / num_of_zone_slots (36 in this case);
+    // - now each zone would pick 1 or more slots; should say a random slot occupancy per zone is calculated.
+    // - But worst case is per zone would have occupied at least 1 slot.
+    // - which means per zone would need to calculate the following
+    //   - no. of zone slots to occupy
+    //   - find a section of the zone slots that could fill up this value (worst case, round back to 1 single slot if no availability)
+    //
+    // a very simple implementation
+    // - first round of allocation is - zone's number of slots to occupy (1..=3); sum up should not exceed the total number of zone slots (36 in this case)
+    //   - during this round, the to-be-rows-add value would be allocated based on num_entries_to_generate.
+    // - second round of allocation is - calculate the zone's gap (1..=3); hence gap + zone boundary should at most meet the the duration_in_seconds value
+    //   - during this round the allocation of zone's to-be-rows-add would be done and spread through the zone's boundary.
+    //
+    // so 36 zone slots... each should have a data-structure declaring what should the zone slot's operation be
+    // - do nothing since it is a Gap
+    // - allocate the rows_to_add value evenly
+
+    // next -> zone slots and how to divide it (duration_in_seconds / (num_of_zone * 6))
+    let zone_slots = generate_sparse_fill_zone_and_boundaries(
+        &zone_allocations,
+        DEFAULT_SPARSE_FILL_ZONE_GENERATION_FACTOR,
+        start_time,
+        duration_in_seconds,
+    );
+    // loop through; if DataZone.num_rows_to_add > 0; call fn to add back DataPoint(s)
+    // hence the output would be a bunch of datapoints in which there would be gap(s) in the timestamp
+    // (since there are zones without data being generated)
+    for zone in zone_slots {
+        if zone.num_rows_to_add > 0 {
+            let mut updated_datapoints = generate_sparse_fill_zone_datapoints(&zone);
+            datapoints.append(&mut updated_datapoints);
+        }
+    }
     Ok(())
+}
+
+fn generate_sparse_fill_zone_and_boundaries(
+    data_zones_to_be_generated: &Vec<u32>,
+    generation_factor: u32,
+    start_time: DateTime<Utc>,
+    duration_in_seconds: i64,
+) -> Vec<DataZone> {
+    // eg. generation_factor = 6
+    // num_of_data_zones = data_zones_to_be_generated.len() = 5
+    // size of vec would be 6*5 = 30; out 5 would be occupied
+    let data_zones_len = generation_factor as usize * data_zones_to_be_generated.len();
+    let mut data_zones: Vec<DataZone> = vec![
+        DataZone::new();
+        // DataZone {
+        //     start_time: Utc::now(),
+        //     end_time: Utc::now(),
+        //     num_rows_to_add: 0,
+        // };
+        data_zones_len
+    ];
+    // first iteration; fill up start_time, end_time
+    let mut zone_idx = 0;
+    let zone_span = duration_in_seconds / data_zones_len as i64;
+    for zone in data_zones.iter_mut() {
+        zone.start_time = start_time + Duration::seconds(zone_span * zone_idx as i64);
+
+        if zone_idx == data_zones_len - 1 {
+            zone.end_time = start_time + Duration::seconds(duration_in_seconds);
+        } else {
+            zone.end_time = zone.start_time + Duration::seconds(zone_span - 1);
+        }
+        zone_idx += 1;
+    }
+    // pick which zone to fill and which not
+    for zone in data_zones_to_be_generated.iter() {
+        loop {
+            let idx = rand::rng().random_range(0..data_zones.len());
+            if data_zones[idx].num_rows_to_add == 0 {
+                data_zones[idx].num_rows_to_add = *zone;
+                break;
+            }
+        }
+    }
+    data_zones
+}
+
+#[derive(Clone, Debug)]
+struct DataZone {
+    start_time: DateTime<Utc>,
+    end_time: DateTime<Utc>,
+    num_rows_to_add: u32,
+}
+
+impl DataZone {
+    fn new() -> DataZone {
+        DataZone {
+            start_time: Utc::now(),
+            end_time: Utc::now(),
+            num_rows_to_add: 0,
+        }
+    }
+}
+
+fn generate_sparse_fill_zone_datapoints(data_zone: &DataZone) -> Vec<DataPoint> {
+    let mut data_points = Vec::new();
+    // calculate the duration
+    let duration = data_zone.end_time.timestamp() - data_zone.start_time.timestamp();
+    // [trace] make it a trace after dev completed
+    tracing::debug!(
+        module = "augmentation",
+        message = format!(
+            "data_zone duration: {} seconds",
+            data_zone.end_time.timestamp() - data_zone.start_time.timestamp()
+        )
+    );
+    let mut rows_to_add_per_second = data_zone.num_rows_to_add / duration as u32;
+    let mut sum = 0;
+    // first fill with equal num of rows
+    for i in 0..duration {
+        // last entry
+        if i == duration - 1 {
+            rows_to_add_per_second = data_zone.num_rows_to_add - sum;
+        }
+        data_points.push(DataPoint {
+            timestamp: data_zone.start_time + Duration::seconds(i),
+            rows_to_add: rows_to_add_per_second as i16,
+        });
+        sum += rows_to_add_per_second;
+    }
+    // second fill is shuffling by a factor of duration * 3;
+    for _ in 0..duration * 3 {
+        let (idx_1, idx_2) = pick_2_random_datapoint(data_points.len() as i64);
+        let rows_available = data_points[idx_1 as usize].rows_to_add;
+        if rows_available < 2 {
+            continue;
+        }
+        let delta = rand::rng().random_range(1..rows_available);
+
+        data_points[idx_1 as usize].rows_to_add -= delta;
+        data_points[idx_2 as usize].rows_to_add += delta;
+    }
+    data_points
 }
 
 #[cfg(test)]
@@ -518,5 +694,124 @@ mod tests {
         assert_eq!(sum as u32 == cfg.number_of_entries().unwrap(), true);
     }
 
-    // sparse_fill
+    #[test]
+    fn test_generate_datapoints_sparse_fill() {
+        // init loggers
+        app_init("./config/default/loggers.toml".to_string()).unwrap();
+
+        let mut cfg = Config::new();
+        cfg.set_distribution_by(Some("sparse_fill".to_string()));
+        cfg.set_number_of_entries(Some(10000));
+        cfg.set_timestamp_format(Some("%Y-%m-%dT%H:%M:%S%.f%:z".to_string()));
+        cfg.set_use_now_as_timestamp(Some(false));
+        cfg.set_generation_duration(Some("10m".to_string()));
+        cfg.set_start_timestamp(Some("2022-01-01T00:00:00.000+00:00".to_string()));
+
+        let result = generate_datapoints(&cfg);
+        assert_eq!(result.is_err(), false);
+        tracing::trace!("{:?}", result.as_ref().unwrap());
+
+        let mut sum = 0;
+        let mut histogram = String::new();
+        let datapoints = result.as_ref().unwrap();
+        for datapoint in datapoints {
+            sum += datapoint.rows_to_add;
+            // [debug]
+            // [graph - histogram]
+            histogram.push_str(format!("timestamp: {} | ", datapoint.timestamp).as_str());
+            for _ in 0..datapoint.rows_to_add {
+                histogram.push_str(".");
+            }
+            histogram.push_str("\n");
+        }
+        tracing::info!("\n{}", histogram);
+        tracing::info!(
+            "sum: {} vs num_entries: {}",
+            sum,
+            cfg.number_of_entries().unwrap()
+        );
+        assert_eq!(sum as u32 == cfg.number_of_entries().unwrap(), true);
+    }
+
+    #[test]
+    fn test_generate_sparse_fill_zone_and_boundaries() {
+        // init loggers
+        app_init("./config/default/loggers.toml".to_string()).unwrap();
+
+        // table test(s) / parameterized test(s)
+        // parameters
+        // 1. data_zones_to_be_generated: &Vec<u32>,
+        // 2. generation_factor: u32,
+        // 3. start_time: DateTime<Utc>,
+        // 4. duration_in_seconds: i64
+        // 5. expect error message: str
+        // 6. expect number of data zones: u32 => (1.len() x 2.)
+        // 7. sum of vec![] in 1.
+        let test_cases = vec![
+            (
+                vec![100, 190, 100, 60],
+                6,
+                Utc::now(),
+                10 * 60,
+                4 * 6,
+                100 + 190 + 100 + 60,
+            ),
+            (
+                vec![30, 80, 120],
+                8,
+                Utc::now(),
+                8 * 60,
+                3 * 8,
+                30 + 80 + 120,
+            ),
+            (
+                vec![100, 190, 100, 60],
+                3,
+                Utc::now(),
+                10 * 60,
+                4 * 3,
+                100 + 190 + 100 + 60,
+            ),
+        ];
+        // iterate the test_cases
+        for (
+            data_zones_to_be_generated,
+            generation_factor,
+            start_time,
+            duration_in_seconds,
+            expect_number_of_data_zones,
+            expect_sum,
+        ) in test_cases
+        {
+            let data_zones = generate_sparse_fill_zone_and_boundaries(
+                &data_zones_to_be_generated,
+                generation_factor,
+                start_time,
+                duration_in_seconds,
+            );
+            assert_eq!(
+                data_zones.len() as u32,
+                expect_number_of_data_zones,
+                "expect {} zones created with {} rows altogether",
+                expect_number_of_data_zones,
+                expect_sum
+            );
+            let mut sum = 0;
+            for data_zone in data_zones.clone() {
+                sum += data_zone.num_rows_to_add;
+            }
+            assert_eq!(
+                sum as u32, expect_sum,
+                "expect {} zones created with {} rows altogether",
+                expect_number_of_data_zones, expect_sum
+            );
+            // all is good, trace a message
+            tracing::info!(
+                "{} zones created with {} rows altogether, distribution: {:?}",
+                expect_number_of_data_zones,
+                expect_sum,
+                data_zones
+            );
+        }
+    }
 }

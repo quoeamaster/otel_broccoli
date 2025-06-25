@@ -198,7 +198,7 @@ impl BackFillable for ConfigExporter {
 /// A Config object (back-filled).
 ///
 /// # examples
-/// ```
+/// ```rust
 /// use otel_broccoli::config::load_config;
 ///
 /// let result = load_config("config/default".to_string(), "tests".to_string(), "config.toml".to_string(), "stdout_test.toml".to_string());
